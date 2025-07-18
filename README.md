@@ -1,7 +1,7 @@
 # Spatially Context-Aware Transformers Facilitate Modeling-Based Anomaly Detection of Subtle Lesions in Brain MRI Images
 
 PyTorch implementation of A [Spatially Context-Aware Transformers Facilitate Modeling-Based
-Anomaly Detection of Subtle Lesions in Brain MRI Images]() (MELBA 2025).
+Anomaly Detection of Subtle Lesions in Brain MRI Images]() (Manuscript submitted 2025).
 
 
 ## Getting Started
