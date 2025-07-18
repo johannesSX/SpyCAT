@@ -82,6 +82,37 @@ def run_validation_short(args, idx_epoch, performer, val_data_loader, tio_mask_f
     performer.train()
 
 
+def run_anno_map(args, val_data_loader, tio_mask_full, device):
+    from model import Performer
+    performer = Performer(args, sum(tio_mask_full.data.shape[1:])).to(device)
+    performer.load_state_dict(torch.load(f"../results/lightning_logs/perf_{args.seq}/checkpoints/val_after_epoch_{args.val_ckpt}.ckpt"))
+    performer.eval()
+
+    for idx_subject, data_dict in enumerate(tqdm.tqdm(val_data_loader.dataset.subject_boxes, desc='NO REST - BATCH', total=len(val_data_loader.dataset.subject_boxes))):
+        tio_img = tio.ScalarImage(data_dict['seq'])
+        tio_anno = copy.deepcopy(tio_img)
+        tio_anno.data = torch.zeros_like(tio_anno.data)
+
+        val_data_loader.dataset.set_global_subject_idx(idx_subject)
+        for in_data, in_neighbors, idcs_nonzero_perf, nonzero in tqdm.tqdm(val_data_loader, leave=False):
+            in_data = in_data.to(device)
+            in_neighbors = in_neighbors.to(device)
+            idcs_nonzero_perf = args.num_emb + idcs_nonzero_perf.to(device)
+
+            out_data_org, out_data_fake, _ = performer.forward_eval(in_data, in_neighbors, idcs_nonzero_perf, custom_thrs=None)
+            out_data_diff = out_data_fake - out_data_org
+
+            for (_, x_idx, y_idx, z_idx), _out_data_diff in zip(nonzero, out_data_diff):
+                assert tio_anno.data[:, x_idx - 8: x_idx + 8, y_idx - 8: y_idx + 8, z_idx - 8: z_idx + 8].max() == 0
+                tio_anno.data[:, x_idx - 8: x_idx + 8, y_idx - 8: y_idx + 8, z_idx - 8: z_idx + 8] = _out_data_diff.detach().cpu()  # _out_data_diff[:, 4: 12, 4: 12, 4: 12].detach().cpu()
+
+        uid_name = str(pathlib.Path(data_dict['seq']).name).replace('.nii.gz', '')
+        uid_parent = str(pathlib.Path(data_dict['seq']).parent.name)
+        path_to_save_a = args.data_dir / 'lightning_logs' / f"perf_{args.seq}" / f"anno_map" / uid_parent / f'a_{uid_name}.nii.gz'
+        path_to_save_a.parent.mkdir(parents=True, exist_ok=True)
+        tio_anno.data = torch.from_numpy(sc.ndimage.gaussian_filter(tio_anno.data.numpy(), sigma=1)) # 1
+        tio_anno.save(path_to_save_a)
+
 
 def run_validation_large(args, val_data_loader, tio_mask_full, device, r=9, topk=10):
     tio_mask_small = tio.ScalarImage(args.mni_mask_path)
@@ -93,7 +124,7 @@ def run_validation_large(args, val_data_loader, tio_mask_full, device, r=9, topk
     performer.eval()
 
     score_img_level = []
-    for idx_subject, data_dict in enumerate(tqdm.tqdm(val_data_loader.dataset.subject_boxes, desc='NO REST - BATCH', total=len(val_data_loader.dataset.subject_boxes))):
+    for idx_subject, data_dict in enumerate(tqdm.tqdm(val_data_loader.dataset.subject_boxes, desc='VAL - BATCH', total=len(val_data_loader.dataset.subject_boxes))):
         tio_img = tio.ScalarImage(data_dict['seq'])
         if 'seg' in list(data_dict.keys()) and data_dict['seg'] is not None:
             tio_seg = tio.ScalarImage(data_dict['seg'])

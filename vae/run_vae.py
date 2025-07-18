@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument('--n_cuda', type=int, default=0, help="CUDA device index (default: 0, disables if no GPU)")
     return parser.parse_args()
 
-def main():
+def run_vae():
     """Main function to set up data and start training."""
     args = parse_args()
     args.data_dir = pathlib.Path(args.data_dir)  # Convert to Path object
@@ -58,4 +58,4 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()
+    run_vae()

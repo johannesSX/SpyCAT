@@ -163,7 +163,6 @@ class MRIDataModule(pl.LightningDataModule):
             dataset_lst = self.build_kk_1(dataset_lst, 1, stage)
             # lst_data_dict_boxes_kk = lst_data_dict_boxes_kk[:10]
             queue = ValDataset_2(
-                self.args.ext,
                 dataset_lst,
                 tio_mask_all,
                 tio_mask_full,

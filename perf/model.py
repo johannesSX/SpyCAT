@@ -3,15 +3,9 @@ from vae import VQVAE
 from performer_pytorch import PerformerLM
 from auto import AutoregressiveWrapper
 from einops import rearrange
-import random
-
-
-
 
 class Performer(torch.nn.Module):
-    # vqvae t1: vqvae.load_state_dict(torch.load("../results/2022_09_17_DINO2DATLASMASK/lightning_logs/vae_t1/version_vq/checkpoints/val_after_epoch_32.ckpt"))
-    # vqvae swi: ext False -> vqvae.load_state_dict(torch.load("../results/2022_09_17_DINO2DATLASMASK/lightning_logs/vae_swi/version_vq/checkpoints/val_after_epoch_45.ckpt"))
-    # vqvae flair: vqvae.load_state_dict(torch.load("../results/2022_09_17_DINO2DATLASMASK/lightning_logs/vae_flair/version_vq/checkpoints/val_after_epoch_79.ckpt"))
+
     def __init__(self, args, len_idcs):
         super(Performer, self).__init__()
 
@@ -24,6 +18,7 @@ class Performer(torch.nn.Module):
             param.requires_grad = False
         self.vqvae = vqvae
 
+        # Set up PerformerLM for autoregressive modeling
         performer = PerformerLM(
             num_tokens=args.num_emb + len_idcs + 1, # 4096 8196 + 8670
             max_seq_len=3 + 1 * 64 + 64, # 6 + 64, # 64 + 3 + 1,  # max sequence length
@@ -36,12 +31,8 @@ class Performer(torch.nn.Module):
         performer = AutoregressiveWrapper(performer)
         self.performer = performer
 
-    def rand_rearrange(self, encoding_inds):
-        pattern = random.choice(self.lst_pattern)
-        encoding_inds = rearrange(encoding_inds, pattern)
-        return encoding_inds
-
     def forward(self, x, xn, i):
+        # Forward pass: encode inputs and compute performer loss
         bs, ns, cs, xs, ys, zs = xn.shape
         _xn = rearrange(xn, 'b n c x y z -> (b n) c x y z')
         _x = torch.vstack([x, _xn])
@@ -58,6 +49,7 @@ class Performer(torch.nn.Module):
         return loss_performer
 
     def forward_eval(self, x, xn, i, custom_thrs=None, len_mask=3 + 1 * 64): # 32
+        # Evaluation pass with no gradient computation
         bs, ns, cs, xs, ys, zs = xn.shape
         _xn = rearrange(xn, 'b n c x y z -> (b n) c x y z')
         _x = torch.vstack([x, _xn])
@@ -81,6 +73,7 @@ class Performer(torch.nn.Module):
 
 
     def forward_pred(self, xn, i, len_preseq=3 + 1 * 64, len_mask=64):
+        # Prediction step using only xn (context frames)
         bs, ns, cs, xs, ys, zs = xn.shape
         _xn = rearrange(xn, 'b n c x y z -> (b n) c x y z')
         with torch.no_grad():

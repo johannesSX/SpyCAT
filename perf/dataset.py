@@ -8,6 +8,9 @@ T_co = TypeVar('T_co', covariant=True)
 
 
 def _help_extract_neighbors(img_data, x_idx, y_idx, z_idx, f_ps, ps, mni_x=193, mni_y=229, mni_z=193):
+    """
+    Extract a cubic neighborhood from img_data centered at x_idx, y_idx, z_idx.
+    """
     x_idx, y_idx, z_idx = x_idx, y_idx, (2 + 16) + z_idx
     _img_data = torch.zeros((1, mni_x, mni_y, 2 + mni_z + 8))
     _img_data[:, 0 : mni_x, 0 : mni_y, 2 : 2 + mni_z] = img_data
@@ -26,11 +29,13 @@ def _help_extract_neighbors(img_data, x_idx, y_idx, z_idx, f_ps, ps, mni_x=193, 
 
 
 class ValDataset_2(torch.utils.data.Dataset):
+    """
+    Validation dataset for extracting patches and neighborhoods from 3D images.
+    """
 
-    def  __init__(self, ext, subject_boxes, tio_mask_sel, tio_mask_full, patch_size=32):
+    def  __init__(self, subject_boxes, tio_mask_sel, tio_mask_full, patch_size=32):
         super(ValDataset_2, self).__init__()
 
-        self.ext = ext
         self.ps = patch_size // 2
         self.f_ps = patch_size
 
@@ -42,13 +47,13 @@ class ValDataset_2(torch.utils.data.Dataset):
         paths_nii = self._extract_paths(self.subject_boxes)
         self.ram_dict_nii = self._init_ram_dict(paths_nii)
 
-        self.tio_ref = tio.LabelMap('../data/masks/mni_icbm152_nlin_sym_09c/mni_icbm152_t1_tal_nlin_sym_09c_mask.nii')
+        self.tio_ref = tio_mask_full # tio.LabelMap('../data/masks/mni_icbm152_nlin_sym_09c/mni_icbm152_t1_tal_nlin_sym_09c_mask.nii')
 
     def _extract_paths(self, subject_boxes):
         paths_nii = []
         for subject in tqdm.tqdm(subject_boxes, desc='EXTRACT PATH FOR RAM INIT'):
             if subject['seq'] not in paths_nii:
-                paths_nii.append(subject['seq'].replace('/media/johsch/newtondata/phd_newton/', '../'))
+                paths_nii.append(subject['seq'])
         return paths_nii
 
     def _init_ram_dict(self, paths_nii):
@@ -62,7 +67,7 @@ class ValDataset_2(torch.utils.data.Dataset):
         return ram_dict_nii
 
     def extract_img(self, subject, x_idx, y_idx, z_idx, ps=8):
-        img_data = self.ram_dict_nii[subject['seq'].replace('/media/johsch/newtondata/phd_newton/', '../')]
+        img_data = self.ram_dict_nii[subject['seq']]
         _img_data = img_data[
                     :,
                     x_idx - ps: x_idx + ps,
@@ -97,7 +102,6 @@ class ValDataset_2(torch.utils.data.Dataset):
 class TileDataset(torch.utils.data.Dataset):
     def __init__(self, subject_boxes, tio_mask_full, patch_size=32, training=False):
         super(TileDataset, self).__init__()
-        print('INIT TILEDATSET TEACHER')
         self.tio_mask_full = tio_mask_full
         self.nonzero_full = tio_mask_full.data.nonzero()
         # self.nonzero_sel = tio_mask_sel.data.nonzero()
@@ -148,6 +152,9 @@ class TileDataset(torch.utils.data.Dataset):
         return _img_data, _neighbors, _idcs_nonzero_perf
 
     def set_ram_dict_with_indices(self, indices):
+        """
+        Loads a subset of subject volumes into RAM for fast access.
+        """
         sub_subject_boxes = [self.subject_boxes[index] for index in indices]
         paths_nii = self._extract_paths(sub_subject_boxes)
         print(f'START LOADING {len(paths_nii)} INTO RAM DICT, S-INDEX {indices[0]} -> E-INDEX {indices[-1]}')
@@ -163,6 +170,9 @@ class TileDataset(torch.utils.data.Dataset):
 
 
     def _init_ram_dict(self, paths_nii):
+        """
+        Pre-load image volumes for random access.
+        """
         ram_dict_nii = {}
         for path_nii in tqdm.tqdm(paths_nii, desc='INIT RAM DICT', total=len(paths_nii)):
             tmp_nii = {
@@ -176,6 +186,9 @@ class TileDataset(torch.utils.data.Dataset):
         return len(self.subject_boxes)
 
     def __getitem__(self, idx):
+        """
+        Returns a random, lesion-augmented patch for healthy subjects.
+        """
         subject = self.subject_boxes[idx]
 
         if subject['not_healthy'] == 0:

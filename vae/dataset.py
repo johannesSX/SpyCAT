@@ -10,6 +10,9 @@ from typing import TypeVar, Optional, Iterator, List
 T_co = TypeVar('T_co', covariant=True)
 
 class LesionNoise:
+    """
+        Applies synthetic lesion-like noise (via Perlin noise) to a 3D patch of an image.
+    """
     def __init__(self, size_range=[3, 5], iters=[0, 1, 2], f_ps=16):
         super(LesionNoise, self).__init__()
         self.size_range = size_range
@@ -17,15 +20,21 @@ class LesionNoise:
         self.f_ps = f_ps
 
     def transform(self, img):
+        """
+        Apply lesion-like Perlin noise patch to the input image tensor.
+        """
+        # Generate Perlin noise of patch size
         noise = generate_perlin_noise_3d(
             (self.f_ps, self.f_ps, self.f_ps), (4, 4, 4), tileable=(False, False, False)
         )
         noise = torch.as_tensor(noise, dtype=img.dtype).unsqueeze(0)
         _noise = noise.clone()
 
+        # Insert noise where noise >= 0, paste minimum elsewhere
         noise[_noise < 0] = img.min()
         noise[_noise >= 0] = img[_noise >= 0]
 
+        # Randomly determine and place lesion region
         s = random.choice(self.size_range)
         ss = int(np.floor(s / 2))
         x = random.randint(0 + ss, self.f_ps - ss - 1)
@@ -54,6 +63,9 @@ class CentroidsDataset(torch.utils.data.Dataset):
         self.global_tile_idx = None
 
     def _pre_compute_nonzero_idx(self, subject_boxes):
+        """
+        Pre-compute closest nonzero mask voxels for each subject.
+        """
         _subject_boxes = []
         for subject in subject_boxes:
             if subject['not_healthy'] == 0:
@@ -68,6 +80,9 @@ class CentroidsDataset(torch.utils.data.Dataset):
         return _subject_boxes
 
     def _extract_img(self, subject, x_idx, y_idx, z_idx):
+        """
+        Return the patch centered at (x_idx, y_idx, z_idx) for the given subject.
+        """
         img_data = self.ram_dict[subject['seq'].replace('/media/johsch/newtondata/phd_newton/', '../')]
         _img_data = img_data[
                    :,
@@ -79,6 +94,9 @@ class CentroidsDataset(torch.utils.data.Dataset):
         return _img_data
 
     def _extract_paths(self, subject_boxes):
+        """
+        Collect unique image paths for memory mapping, standardize path prefix.
+        """
         paths_nii = []
         for subject in tqdm.tqdm(subject_boxes, desc='EXTRACT PATH FOR RAM INIT'):
             if subject['seq'] not in paths_nii:
@@ -86,6 +104,9 @@ class CentroidsDataset(torch.utils.data.Dataset):
         return paths_nii
 
     def _init_ram_dict(self, paths):
+        """
+        Pre-load image volumes to a RAM dictionary.
+        """
         ram_dict = {}
         for path in tqdm.tqdm(paths, desc='INIT RAM DICT'):
             tmp = {
@@ -102,6 +123,9 @@ class CentroidsDataset(torch.utils.data.Dataset):
         self.global_tile_idx = idx
 
     def __getitem__(self, idx):
+        """
+        Returns a patch for given subject.
+        """
         subject = self.subject_boxes[idx]
         x_idx, y_idx, z_idx = -1, -1, -1
         x_idx_org, y_idx_org, z_idx_org = [0, 0, 0]
@@ -126,6 +150,10 @@ class CentroidsDataset(torch.utils.data.Dataset):
 
 
 class TileDataset(torch.utils.data.Dataset):
+    """
+        PyTorch Dataset for randomly sampling 3D patches from healthy data, with optional lesion augmentation.
+    """
+
     def __init__(self, subject_boxes, tio_mask_all, patch_size=32, training=False):
         super(TileDataset, self).__init__()
         print('INIT TILEDATSET TEACHER')
@@ -143,6 +171,9 @@ class TileDataset(torch.utils.data.Dataset):
         self.transform = LesionNoise()
 
     def _help_extract_img_0(self, img_data_1):
+        """
+        Randomly extracts a patch centered at a nonzero mask index.
+        """
         idx_nonzero = torch.tensor(random.sample(range(self.nonzero_all.size(0)), 1))[0]
         _, x_idx, y_idx, z_idx = self.nonzero_all[idx_nonzero]
         _img_data_1 = img_data_1[:,
@@ -161,12 +192,18 @@ class TileDataset(torch.utils.data.Dataset):
         return _img_data_1
 
     def _extract_img_0(self, subject):
+        """
+        Return a randomly patch for given subject.
+        """
         img_data_1 = self.ram_dict_nii[subject['seq']]
         _img_data_1 = self._help_extract_img_0(img_data_1)
         assert list(_img_data_1.shape) == [1, self.f_ps, self.f_ps, self.f_ps]
         return _img_data_1
 
     def set_ram_dict_with_indices(self, indices):
+        """
+        Loads a subset of subject volumes into RAM for fast access.
+        """
         sub_subject_boxes = [self.subject_boxes[index] for index in indices]
         paths_nii = self._extract_paths(sub_subject_boxes)
         print(f'START LOADING {len(paths_nii)} INTO RAM DICT, S-INDEX {indices[0]} -> E-INDEX {indices[-1]}')
@@ -180,6 +217,9 @@ class TileDataset(torch.utils.data.Dataset):
         return paths_nii
 
     def _init_ram_dict(self, paths_nii):
+        """
+        Pre-load image volumes for random access.
+        """
         ram_dict_nii = {}
         for path_nii in tqdm.tqdm(paths_nii, desc='INIT RAM DICT', total=len(paths_nii)):
             tmp_nii = {
@@ -193,6 +233,9 @@ class TileDataset(torch.utils.data.Dataset):
         return len(self.subject_boxes)
 
     def __getitem__(self, idx):
+        """
+        Returns a random, lesion-augmented patch for healthy subjects.
+        """
         subject = self.subject_boxes[idx]
 
         if subject['not_healthy'] == 0:
