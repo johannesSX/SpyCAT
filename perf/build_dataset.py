@@ -141,7 +141,7 @@ class MRIDataModule(pl.LightningDataModule):
             if max_2:
                 dataset_lst = self.lst_train_l_1[:2] + self.lst_val_nl[:2]
             else:
-                dataset_lst = self.lst_train_l_1[:2] + self.lst_val_nl[:2]
+                dataset_lst = self.lst_train_l_1 + self.lst_val_nl
             training = False
 
         if stage == 'fit':
