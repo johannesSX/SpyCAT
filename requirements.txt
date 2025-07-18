@@ -1,0 +1,12 @@
+torch
+torchio
+pytorch-lightning
+scikit-learn
+tqdm
+performer_pytorch
+einops
+numpy
+torchmetrics
+scipy
+raster-geometry
+nilearn
